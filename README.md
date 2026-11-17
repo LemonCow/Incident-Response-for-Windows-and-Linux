@@ -129,11 +129,4 @@ The script prompts for investigator name, case name, date, and time, then asks w
 
 See [linux/ldd_output/](linux/ldd_output/) for the `ldd` analysis of `lsof`, which documents why the drive's binaries must be static or compatible with the target.
 
-## Class information
 
-- **Course:** DFOR 660, Project 3
-- **Author:** Philip Isaacs
-
-## License
-
-MIT, see [LICENSE](LICENSE).
