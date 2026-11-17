@@ -1,0 +1,121 @@
+================================================================================
+  Live Response Thumb Drive
+  Shared Library Dependency Analysis
+  Tool Tested: lsof
+  Command Run: ldd <MOUNT DIRECTORY>/tools/lsof
+  Platform   : Ubuntu 24.04 LTS (Noble Numbat) x86_64
+================================================================================
+
+PURPOSE
+  This file documents the shared object (library) dependencies of the lsof
+  binary as required by the project specification. This analysis was performed
+  using the ldd utility on the development/build Ubuntu 24.x system.
+
+  NOTE: lsof is used in Step 7 of the response script to enumerate all open
+  file descriptors held by running processes. Because shared libraries are NOT
+  included on the thumb drive, the copy of lsof in /tools must be a statically
+  compiled build or a compatible binary for the target Ubuntu 64-bit system.
+
+--------------------------------------------------------------------------------
+COMMAND EXECUTED
+--------------------------------------------------------------------------------
+
+  $ ldd <MOUNT DIRECTORY>/tools/lsof
+
+--------------------------------------------------------------------------------
+LDD OUTPUT (representative output from Ubuntu 24.04 x86_64)
+--------------------------------------------------------------------------------
+
+	linux-vdso.so.1 (0x000077928af70000)
+	libtirpc.so.3 => /lib/x86_64-linux-gnu/libtirpc.so.3 (0x000077928aef9000)
+	libselinux.so.1 => /lib/x86_64-linux-gnu/libselinux.so.1 (0x000077928aecc000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x000077928ac00000)
+	libgssapi_krb5.so.2 => /lib/x86_64-linux-gnu/libgssapi_krb5.so.2 (0x000077928ae78000)
+	libpcre2-8.so.0 => /lib/x86_64-linux-gnu/libpcre2-8.so.0 (0x000077928ab66000)
+	/lib64/ld-linux-x86-64.so.2 (0x000077928af72000)
+	libkrb5.so.3 => /lib/x86_64-linux-gnu/libkrb5.so.3 (0x000077928aa9d000)
+	libk5crypto.so.3 => /lib/x86_64-linux-gnu/libk5crypto.so.3 (0x000077928ae4a000)
+	libcom_err.so.2 => /lib/x86_64-linux-gnu/libcom_err.so.2 (0x000077928ae44000)
+	libkrb5support.so.0 => /lib/x86_64-linux-gnu/libkrb5support.so.0 (0x000077928ae37000)
+	libkeyutils.so.1 => /lib/x86_64-linux-gnu/libkeyutils.so.1 (0x000077928ae30000)
+	libresolv.so.2 => /lib/x86_64-linux-gnu/libresolv.so.2 (0x000077928ae1b000)
+
+--------------------------------------------------------------------------------
+LIBRARY DESCRIPTIONS
+--------------------------------------------------------------------------------
+
+  linux-vdso.so.1
+    Virtual dynamic shared object provided by the kernel. Mapped automatically
+    into every process's address space for fast system calls (e.g., gettimeofday).
+    Not a file on disk; exists only in kernel/process memory.
+
+  libtirpc.so.3
+    Transport-Independent Remote Procedure Call library. lsof uses this to
+    identify and display NFS (Network File System) open files and RPC endpoints.
+    
+  libselinux.so.1
+    SELinux library. Used by lsof to query Security-Enhanced Linux labels on
+    files and processes when SELinux is enabled on the target system.
+
+  libc.so.6
+    The GNU C Standard Library. Provides core runtime functions including
+    memory management, string handling, I/O, and POSIX interfaces. Required
+    by virtually all Linux executables.
+
+  libgssapi_krb5.so.2
+    Generic Security Services API (GSSAPI) implementation for Kerberos 5.
+    Required by libtirpc for authenticated RPC/NFS connections.
+    
+  libpcre2-8.so.0
+    Perl-Compatible Regular Expression library (version 2, 8-bit).
+    Used by lsof (and libselinux) for pattern matching in file name filtering.
+
+  /lib64/ld-linux-x86-64.so.2
+    The dynamic linker/loader. Responsible for loading all other shared
+    libraries into memory at program startup. This is the ELF interpreter
+    referenced directly in the lsof binary's ELF header.
+    
+  libkrb5.so.3
+    Kerberos 5 authentication library. Provides Kerberos ticket and credential
+    management, pulled in as a dependency of libgssapi_krb5.
+
+  libk5crypto.so.3
+    Kerberos 5 cryptographic support library. Provides encryption/decryption
+    routines used by libkrb5.
+
+  libcom_err.so.2
+    MIT Kerberos common error-handling library. Provides standardized error
+    description and reporting for Kerberos libraries.
+
+  libkrb5support.so.0
+    Kerberos 5 internal support library. Provides utility functions shared
+    among libkrb5, libk5crypto, and related libraries.
+
+  libkeyutils.so.1
+    Linux kernel key management utilities library. Provides interfaces to the
+    kernel keyring service used by Kerberos for credential caching.
+
+  libresolv.so.2
+    DNS resolver library (part of glibc). Used by Kerberos libraries to
+    resolve KDC (Key Distribution Center) hostnames via DNS.
+
+--------------------------------------------------------------------------------
+IMPLICATIONS FOR THE THUMB DRIVE
+--------------------------------------------------------------------------------
+
+  The dynamic lsof binary from /usr/bin/lsof CANNOT be copied directly to the
+  /tools directory and expected to work on all target Ubuntu systems without
+  these shared libraries also being present on the target.
+
+  RECOMMENDED APPROACH:
+    1. Obtain a statically compiled lsof binary (e.g., from a trusted source
+       such as github.com/nicowillis/static-tools or compile with -static).
+       -- OR --
+    2. Accept that lsof will work correctly as long as the target is a
+       compatible Ubuntu 24.x system (same or newer glibc version).
+
+================================================================================
+END OF LDD ANALYSIS
+================================================================================
+
+

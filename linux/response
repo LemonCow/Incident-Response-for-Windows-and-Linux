@@ -1,0 +1,274 @@
+#!/bin/bash
+#Bash collection script created by Philip Isaacs
+
+# ============================================================
+#  AD Incident Response Script
+#  Platform : Ubuntu Linux 64-bit
+#  Version  : 2.0
+#  Author   : Philip Isaacs 
+# ============================================================
+# USAGE: sudo bash /media/<MOUNTPOINT>/response
+		
+#			OR
+			
+#	 cd /media/<MOUNTPOINT>/
+#	 sudo ./response
+# ============================================================
+
+clear
+
+# ── Locate the thumb drive (script's own directory) ─────────
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+location="$SCRIPT_PATH"
+tools="$location/tools"
+collect="data"
+
+start_time=$($tools/date +%s)
+
+# ── Banner ───────────────────────────────────────────────────
+$tools/echo "=============================================="
+$tools/echo "   AD Incident Response Script"
+$tools/echo "   By Philip Isaacs"
+$tools/echo "=============================================="
+$tools/echo ""
+
+# ── Confirm execution ────────────────────────────────────────
+read -rp "Do you want to continue (yes or no)? " c_response
+case $c_response in
+    Y|y|yes|Yes|YES) $tools/echo "" ;;
+    N|n|no|No|NO) $tools/echo "Script collection canceled."; exit ;;
+esac
+
+# ── Collect case metadata ────────────────────────────────────
+read -rp "Enter Investigator Name (no spaces): " investigator
+investigator="${investigator// /_}"
+investigator="${investigator//\//-}"
+
+read -rp "Enter Case Name (no spaces): " case_name
+case_name="${case_name// /_}"
+case_name="${case_name//\//-}"
+
+read -rp "Enter Date (MM-DD-YYYY): " watch_date
+watch_date="${watch_date//\//-}"
+
+read -rp "Enter Time (HH:MM): " watch_time
+watch_time="${watch_time//\//:}"
+
+# ── Create output directory structure ────────────────────────
+vol="$location/$collect/volatile_${investigator}_${case_name}_${watch_date}"
+nv="$location/$collect/nonvolatile_${investigator}_${case_name}_${watch_date}"
+
+$tools/mkdir -p "$vol" "$nv"
+
+log_file="$location/$collect/${investigator}_${case_name}_${watch_date}.log" err_file="$location/$collect/${investigator}_${case_name}_${watch_date}.err"
+
+# ── Define log function ──────────────────────────────────────
+log() {
+    $tools/echo "[$($tools/date '+%Y-%m-%d %H:%M:%S')] $*" | $tools/tee -a "$log_file"
+}
+
+# ── Log case header ──────────────────────────────────────────
+log "===== AD Live Response Started ====="
+log "Case Name    : $case_name"
+log "Investigator : $investigator"
+log "Watch Date   : $watch_date"
+log "Watch Time   : $watch_time"
+log "Hostname     : $($tools/hostname)"
+log "Operator     : $($tools/whoami)"
+log "Script Dir   : $location"
+log "Log File     : $log_file"
+log "Error File   : $err_file"
+
+# ── Check for root ───────────────────────────────────────────
+if [[ $EUID -ne 0 ]]; then
+    log "WARNING: Not running as root. Some collections may be incomplete or not."
+    $tools/echo "WARNING: Not running as root." | $tlog "Volatile Directory: $vol"ools/tee -a "$err_file"
+fi
+
+# ============================================================
+# BEGIN VOLATILE DATA COLLECTION
+# ============================================================
+$tools/echo ""
+log "========== BEGIN VOLATILE DATA COLLECTION =========="
+
+# ── Step 1: System Time (Time Skew Check) ───────────────────
+log "VOLATILE Step 1: System Time"
+$tools/date >> "$vol/systemtime.txt" 2>> "$err_file"
+
+# ── Step 2: Running Processes ────────────────────────────────
+log "VOLATILE Step 2: Running Processes"
+$tools/ps -auxef >> "$vol/processes.txt" 2>> "$err_file"
+$tools/ps -eo pid,ppid,user,stat,cmd --sort=pid >> "$vol/proc_tree.txt" 2>> "$err_file"
+
+# ── Step 3: Running Services ────────────────────────────────
+log "VOLATILE Step 3: Running Services"
+$tools/systemctl list-units --type=service --all >> "$vol/systemd_services.txt" 2>> "$err_file"
+
+# ── Step 4: System State ─────────────────────────────────────
+log "VOLATILE Step 4: System State"
+$tools/uptime  >> "$vol/uptime.txt"        2>> "$err_file"
+$tools/vmstat  >> "$vol/vmstat.txt"        2>> "$err_file"
+$tools/free -h >> "$vol/memory_usage.txt"  2>> "$err_file"
+
+# ── Step 5: Open Network Connections ─────────────────────────
+log "VOLATILE Step 5: Open Network Connections"
+$tools/netstat -ano  >> "$vol/netstat.txt"    2>> "$err_file"
+$tools/ss -tulnap    >> "$vol/ss_sockets.txt" 2>> "$err_file"
+
+# ── Step 6: DNS Cache & Host Files ───────────────────────────
+log "VOLATILE Step 6: DNS Cache and Host Files"
+$tools/resolvectl             >> "$vol/dns_data.txt" 2>> "$err_file"
+$tools/resolvectl statistics  >> "$vol/dns_data.txt" 2>> "$err_file"
+$tools/resolvectl show-cache  >> "$vol/dns_data.txt" 2>> "$err_file"
+$tools/cat /etc/hosts         >> "$vol/hosts_file.txt" 2>> "$err_file"
+
+# ── Step 7: Open Files ───────────────────────────────────────
+log "VOLATILE Step 7: Open Files (lsof)"
+$tools/lsof -nP >> "$vol/open_files.txt" 2>> "$err_file"
+
+# ── Step 8: Kernel Ring Buffer ───────────────────────────────
+log "VOLATILE Step 8: Kernel Ring Buffer (dmesg)"
+$tools/dmesg >> "$vol/dmesg-kernel.txt" 2>> "$err_file"
+
+# ── Step 9: Routing Table ────────────────────────────────────
+log "VOLATILE Step 9: Routing Table"
+$tools/ip route show >> "$vol/routing_table.txt" 2>> "$err_file"
+$tools/route -n      >> "$vol/route.txt"         2>> "$err_file"
+
+# ── Step 10: ARP Cache ────────────────────────────────────────
+log "VOLATILE Step 10: ARP Cache"
+$tools/arp -a >> "$vol/arp_cache.txt" 2>> "$err_file"
+
+# ── Step 11: Kernel Modules (Potential Rootkits) ─────────────
+log "VOLATILE Step 11: Kernel Modules"
+$tools/lsmod >> "$vol/lsmod.txt" 2>> "$err_file"
+
+# ── Step 12: Command History (All Users) ─────────────────────
+log "VOLATILE Step 12: Command History"
+if [[ -f /root/.bash_history ]]; then
+    $tools/echo "=== /root/.bash_history ===" >> "$vol/shell_history.txt"
+    $tools/cat /root/.bash_history >> "$vol/shell_history.txt" 2>> "$err_file"
+fi
+for u in $($tools/cut -d: -f1 /etc/passwd); do
+    home=$($tools/getent passwd "$u" | $tools/cut -d: -f6)
+    for hist in .bash_history .zsh_history .sh_history .python_history; do
+        if [[ -f "$home/$hist" ]]; then
+            $tools/echo "=== $u : $home/$hist ===" >> "$vol/shell_history.txt"
+            $tools/cat "$home/$hist" >> "$vol/shell_history.txt" 2>> "$err_file"
+        fi
+    done
+done
+
+# ── Step 13: Current Shell Variables ─────────────────────────
+log "VOLATILE Step 13: Current Shell Variables"
+set >> "$vol/sys-var.txt" 2>> "$err_file"
+
+# ── LAST STEP: Memory Acquisition ────────────────────────────
+log "VOLATILE Last Step: Memory Acquisition (avml)"
+read -rp "Do you want to collect memory? [Yes/No]: " c_memory
+case "$c_memory" in
+    [Yy]|[Yy][Ee][Ss])
+        log "User chose to collect memory."
+        if [[ -x "$tools/avml" ]]; then
+            $tools/avml "$vol/memory.lime" 2>> "$err_file"
+            log "Memory image written to $vol/memory.lime"
+        else
+            log "WARNING: avml not found at $tools/avml — skipping memory acquisition."
+            $tools/echo "WARNING: avml binary not present." >> "$err_file"
+        fi
+        ;;
+    *)
+        log "Memory collection skipped by user."
+        ;;
+esac
+
+# ============================================================
+# BEGIN NON-VOLATILE DATA COLLECTION
+# ============================================================
+$tools/echo ""
+log "========== BEGIN NON-VOLATILE DATA COLLECTION =========="
+
+# ── Step 1: System Information ───────────────────────────────
+log "NON-VOLATILE Step 1: System Information"
+$tools/uname -a          >> "$nv/sysinfo.txt" 2>> "$err_file"
+$tools/hostnamectl       >> "$nv/sysinfo.txt" 2>> "$err_file"
+$tools/cat /etc/os-release >> "$nv/sysinfo.txt" 2>> "$err_file"
+
+# ── Step 2: Cron Jobs & Scheduled Tasks ─────────────────────
+log "NON-VOLATILE Step 2: Cron Jobs and Scheduled Tasks"
+$tools/cat /etc/crontab >> "$nv/crontab.txt" 2>> "$err_file"
+$tools/ls -la /etc/cron.* >> "$nv/cron_dirs.txt" 2>> "$err_file"
+for u in $($tools/cut -d: -f1 /etc/passwd); do
+    $tools/crontab -l -u "$u" >> "$nv/cron_users.txt" 2>> "$nv/cron_users.txt"
+done
+
+# ── Step 3: Installed Packages ───────────────────────────────
+log "NON-VOLATILE Step 3: Installed Packages"
+$tools/dpkg -l >> "$nv/installed_pkgs.txt" 2>> "$err_file"
+
+# ── Step 4: System Logs ──────────────────────────────────────
+log "NON-VOLATILE Step 4: System Logs"
+$tools/cp -r /var/log "$nv" 2>> "$err_file"
+
+# ── Step 5: Directory Listings ───────────────────────────────
+log "NON-VOLATILE Step 5: Directory Listings"
+$tools/ls -alhR / >> "$nv/directory-la.txt" 2>> "$nv/directory-la-err.txt"
+
+# ── Step 6: Mounted Devices ──────────────────────────────────
+log "NON-VOLATILE Step 6: Mounted Devices"
+$tools/mount -lv >> "$nv/mounted_vols.txt" 2>> "$err_file"
+
+# ── Step 7: Disk Usage ──────────────────────────────────
+log "NON-VOLATILE Step 7: Disk Usage"
+$tools/df -h >> "$nv/disk_usage.txt"    2>> "$err_file"
+
+# ── Step 8: Mounted Devices ──────────────────────────────────
+log "NON-VOLATILE Step 8: Block Devices"
+$tools/lsblk -a >> "$nv/block_devices.txt" 2>> "$err_file"
+
+# ── Step 9: Network Adapter Configuration ────────────────────
+log "NON-VOLATILE Step 9: Network Adapter Configuration"
+$tools/ip a >> "$nv/ipconfig.txt" 2>> "$err_file"
+
+# ── Last Step: User Session & Activity ───────────────────────
+log "NON-VOLATILE Last Step: User Session and Activity"
+$tools/who   >> "$nv/users_logged_on.txt" 2>> "$err_file"
+$tools/last  >> "$nv/login_history.txt"   2>> "$err_file"
+$tools/lastb >> "$nv/failed_logins.txt"   2>> "$err_file"
+
+# ============================================================
+# HASHING
+# ============================================================
+$tools/echo ""
+log "========== BEGIN HASHING =========="
+
+log "Hashing volatile data..."
+$tools/find "$vol" -type f -exec $tools/sha1sum {} + >> "$vol/volatile_hashes.txt" 2>> "$err_file"
+
+log "Hashing non-volatile data..."
+$tools/find "$nv" -type f -exec $tools/sha1sum {} + >> "$nv/non_volatile_hashes.txt" 2>> "$err_file"
+
+end_time=$($tools/date +%s)
+elapsed=$((end_time - start_time))
+
+# ============================================================
+# COMPLETE
+# ============================================================
+$tools/echo ""
+log "========== AD LIVE RESPONSE COMPLETE =========="
+log "Output Directory: $location/$collect"
+log "Volatile Directory: $vol"
+log "Volatile Directory: $nv"
+log "Volatile files collected: $($tools/find "$vol" -type f | $tools/wc -l)"
+log "Non-volatile files collected: $($tools/find "$nv" -type f | $tools/wc -l)"
+log "Estimated size of the data folder: $($tools/du -sh "$location/$collect" | $tools/cut -f1)"
+log "Collection duration: ${elapsed} seconds"
+$tools/echo ""
+$tools/echo "Collection complete. Review $log_file for details."
+
+
+
+
+
+
+

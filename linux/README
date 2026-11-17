@@ -1,0 +1,257 @@
+===============================================================================
+  AD Live Response Thumb Drive
+  Ubuntu Linux 64-bit | Version 2.0
+  Author : Philip Isaacs / AD Security Operations
+  Course : DFOR 660 — Project 3
+===============================================================================
+
+TOOL TESTED FOR LDD ANALYSIS
+  Tool tested : lsof
+  Output file : /ldd_output/lsof_ldd_shared_library_analysis.txt
+
+-------------------------------------------------------------------------------
+DRIVE STRUCTURE
+-------------------------------------------------------------------------------
+
+  /response            Main incident response script — execute this
+  /README              This file
+  /tools/              Trusted binaries called by the script
+  /data/               Populated at runtime by the script
+      /volatile_{case-title}/       Volatile artifact output
+      /nonvolatile_{case-title}/    Non-volatile artifact output
+      /{case-title}.log		    Console output from running the response script
+      /{case-title).err             All error messages that result from running the response script
+  /ldd_output/         Shared library dependency analysis for lsof
+        /lsof_ldd_shared_library_analysis      Analysis of lsof dependencies
+
+-------------------------------------------------------------------------------
+PREREQUISITES
+-------------------------------------------------------------------------------
+
+  1. Target system must be running Ubuntu Linux 64-bit (24.x recommended).
+  2. Script must be run as root (sudo).
+  3. Thumb drive must be mounted with execute permissions (see Step 2 below).
+  4. Minimum 32GB free space on drive recommended to accommodate logs,
+     directory listings, and RAM memory image (avml).
+
+-------------------------------------------------------------------------------
+STEP 1 — IDENTIFY THE MOUNT POINT
+-------------------------------------------------------------------------------
+
+  After inserting the thumb drive, identify its mount point:
+
+    lsblk
+    -- or --
+    df -h
+
+  The drive will appear as something like:
+    /media/<username>/ADLIVE   or   /mnt/usb
+
+  Note the full path — referred to below as <MOUNTPOINT>.
+
+-------------------------------------------------------------------------------
+STEP 2 — REMOUNT WITH EXECUTE PERMISSIONS (if needed)
+-------------------------------------------------------------------------------
+
+  Ubuntu may auto-mount the drive with noexec, blocking script execution.
+  If the script fails to run, remount with exec:
+
+    sudo mount -o remount,exec /dev/<device> <MOUNTPOINT>
+
+  Example:
+    sudo mount -o remount,exec /dev/sdb1 /media/analyst/ADLIVE
+
+-------------------------------------------------------------------------------
+STEP 3 — EXECUTE THE SCRIPT
+-------------------------------------------------------------------------------
+
+  Run the script as root from the thumb drive root directory:
+
+    sudo bash <MOUNTPOINT>/response
+    
+    Example:
+    sudo bash /media/analyst/ADLIVE/response
+    
+    OR
+    
+    cd <MOUNTPOINT>
+    sudo ./response
+
+  When prompted enter the following:
+
+    Investigator Name  : Your name, no spaces (underscores applied automatically)
+    Case Name          : Case identifier, no spaces
+    Date               : Format MM-DD-YYYY  (forward slashes auto-converted)
+    Time               : Format HH:MM
+
+-------------------------------------------------------------------------------
+STEP 4 — MONITOR COLLECTION
+-------------------------------------------------------------------------------
+
+  The script displays timestamped log entries as each step executes.
+  Do NOT interrupt the script mid-run.
+
+  Collection runs in this order:
+
+    VOLATILE collection (Steps 1–13 + Last Step)
+      1.  System Time
+      2.  Running Processes
+      3.  Running Services (systemctl)
+      4.  System State (uptime, vmstat, free)
+      5.  Open Network Connections (netstat, ss)
+      6.  DNS Cache and Host Files (resolvectl, /etc/hosts)
+      7.  Open Files (lsof)
+      8.  Kernel Ring Buffer (dmesg)
+      9.  Routing Table (ip route, route)
+      10. ARP Cache
+      11. Kernel Modules
+      12. Command History (all users)
+      13. Current Shell Variables (set)
+      Last: Memory Acquisition (avml) — see NOTE below
+
+    NON-VOLATILE collection (Steps 1–9 + Last Step)
+      1.  System Information (uname, hostnamectl, os-release)
+      2.  Cron Jobs and Scheduled Tasks
+      3.  Installed Packages (dpkg)
+      4.  System Logs (copy of /var/log)
+      5.  Directory Listings (recursive listing of /)
+      6.  Mounted Devices
+      7.  Disk Usage
+      8.  Block Devices
+      9.  Network Adapter Configuration (ip a)
+      Last: User Session and Activity (who, last, lastb)
+
+    HASHING
+      SHA-1 hashes of all volatile files → volatile_hashes.txt
+      SHA-1 hashes of all non-volatile files → non_volatile_hashes.txt
+
+  NOTE: Memory acquisition (avml) is an optional feature that you can
+	opt out of during the scanning process
+
+-------------------------------------------------------------------------------
+STEP 5 — REVIEW OUTPUT
+-------------------------------------------------------------------------------
+
+  All output is written to /data on the thumb drive.
+  <case_title> = <investigator>_<case_name>_<case_date>
+  Log and error files are named:
+    <case_title>.log
+    <case_title>.err
+   
+  VOLATILE artifacts → <MOUNTPOINT>/data/volatile_<case_title>/
+
+    systemtime.txt        System clock at time of collection
+    processes.txt         All running processes (ps -auxef)
+    proc_tree.txt         Process tree sorted by PID (ps -eo)
+    systemd_services.txt  All systemd service units
+    uptime.txt            System uptime and load average
+    vmstat.txt            Virtual memory statistics
+    memory_usage.txt      RAM usage summary (free -h)
+    netstat.txt           Active TCP/UDP connections (netstat -ano)
+    ss_sockets.txt        Socket statistics (ss -tulnap)
+    dns_data.txt          DNS cache, statistics, and resolver info
+    hosts_file.txt        /etc/hosts contents
+    open_files.txt        All open file descriptors (lsof -nP)
+    dmesg-kernel.txt      Kernel ring buffer (dmesg)
+    routing_table.txt     IP routing table (ip route show)
+    route.txt             Routing table (route -n)
+    arp_cache.txt         ARP cache — Layer 2 MAC-to-IP mappings
+    lsmod.txt             Loaded kernel modules
+    shell_history.txt     Command history for all users (all history files)
+    sys-var.txt           Shell environment variables at collection time
+    memory.lime           Full RAM image — avml (if enabled)
+    volatile_hashes.txt   SHA-1 hashes of all volatile files
+
+  NON-VOLATILE artifacts → <MOUNTPOINT>/data/nonvolatile_<case_title>/
+
+    sysinfo.txt           OS, hostname, kernel version (uname, hostnamectl)
+    cron_root.txt         Root crontab entries
+    crontab.txt           /etc/crontab contents
+    cron_dirs.txt         /etc/cron.* directory listings
+    cron_users.txt        Crontab entries for all system users
+    installed_pkgs.txt    Installed packages (dpkg -l)
+    log/                  Full recursive copy of /var/log
+    directory-la.txt      Recursive directory listing of /
+    directory-la-err.txt  Errors from directory listing
+    mounted_vols.txt      Mounted volumes (mount -lv)
+    disk_usage.txt        Disk usage by filesystem (df -h)
+    block_devices.txt     All block devices (lsblk -a)
+    ipconfig.txt          Network adapter configuration (ip a)
+    users_logged_on.txt   Currently logged-on users (who)
+    login_history.txt     Login history (last)
+    failed_logins.txt     Failed login attempts (lastb)
+    non_volatile_hashes.txt  SHA-1 hashes of all non-volatile files
+
+-------------------------------------------------------------------------------
+STEP 6 — SAFE REMOVAL
+-------------------------------------------------------------------------------
+
+  After collection is complete and the script has exited:
+
+    sudo eject <MOUNTPOINT>
+
+-------------------------------------------------------------------------------
+TRUSTED TOOLS IN /tools
+-------------------------------------------------------------------------------
+
+  arp           ARP cache
+  avml          Memory acquisition (github.com/microsoft/avml)
+  cat           File output
+  cp            File and directory copy
+  crontab       Scheduled task enumeration
+  cut           Field extraction
+  date          System time and elapsed time calculation
+  df            Disk usage by filesystem
+  dmesg         Kernel ring buffer
+  dpkg          Installed package listing
+  du            Disk usage summary
+  echo          Terminal and log output
+  find          File search and hash execution
+  free          RAM usage
+  getent        User account lookup
+  hostnamectl   Hostname and OS information
+  hostname      System hostname
+  ip            Network interface and routing
+  last          Login history
+  lastb         Failed login history
+  ls            Directory listing
+  lsblk         Block device listing
+  lsmod         Kernel module listing
+  lsof          Open file descriptors
+  mount         Mounted volume listing
+  mkdir         Creates folders/directories
+  netstat       Network connections
+  printf        Formatted output
+  ps            Process listing
+  resolvectl    DNS cache and resolver info
+  route         Routing table
+  sha1sum       File hashing
+  ss            Socket statistics
+  systemctl     Systemd service listing
+  tee           Output to terminal and log simultaneously
+  uname         Kernel and architecture info
+  uptime        System uptime
+  vmstat        Virtual memory statistics
+  wc            File and line counting
+  who           Currently logged-on users
+  whoami        Current operator identity
+
+-------------------------------------------------------------------------------
+NOTES
+-------------------------------------------------------------------------------
+
+  - Do NOT build virus scanning into the script.
+  - Scan this drive with external AV before operational deployment.
+  - Test on a different Ubuntu system before use — do not rely solely on
+    the system the drive was built on.
+  - Statically compiled binaries in /tools are preferred to avoid shared
+    library dependency failures on target systems.
+  - See /ldd_output/lsof_ldd_shared_library_analysis.txt for an example
+    of ldd shared library analysis performed on the lsof binary.
+  - The script records collection duration in seconds at completion.
+  - The script reports file counts and estimated data folder size at the
+    end of each run.
+
+
+
+
